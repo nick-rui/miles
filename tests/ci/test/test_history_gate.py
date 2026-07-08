@@ -628,7 +628,7 @@ def test_dual_register_with_gate_uses_supplied_registry(tmp_path, store):
     test_file = _write_dual_register_file(
         tmp_path,
         """
-        register_ci_gate(metric_key="rollout/raw_reward", hard_ref=0.30,
+        register_ci_gate(metric_key="rollout/raw_reward",
                          steps="last", constraint={"rel": 0.20})
         """,
     )
@@ -644,7 +644,7 @@ def test_dual_register_with_gate_uses_supplied_registry(tmp_path, store):
     result = evaluate_gate(test_file, record, store, registry=cuda_registry)
 
     assert len(result.metrics) == 1
-    assert result.metrics[0].hard_status == GateStatus.PASS
+    assert result.metrics[0].historical_status == GateStatus.INACTIVE
     # Identity is the supplied CUDA registry, not the ROCm one.
     assert result.backend == "cuda"
     assert result.suite == "stage-c-8-gpu-h100"
@@ -679,7 +679,7 @@ def test_single_register_gate_registry_none_still_reparses(tmp_path, store):
     test_file = _write_test_file(
         tmp_path,
         """
-        register_ci_gate(metric_key="rollout/raw_reward", hard_ref=0.30,
+        register_ci_gate(metric_key="rollout/raw_reward",
                          steps="last", constraint={"rel": 0.20})
         """,
     )
@@ -688,7 +688,7 @@ def test_single_register_gate_registry_none_still_reparses(tmp_path, store):
     result = evaluate_gate(test_file, record, store, registry=None)
 
     assert len(result.metrics) == 1
-    assert result.metrics[0].hard_status == GateStatus.PASS
+    assert result.metrics[0].historical_status == GateStatus.INACTIVE
     assert result.backend == "cuda"
     assert result.suite == "stage-c-8-gpu-h100"
     assert result.trusted is True
