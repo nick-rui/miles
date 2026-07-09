@@ -27,7 +27,7 @@ If the session server is the bottleneck in a run (`miles-session-worker` process
 
 ## Required decomposition
 
-- **`SessionCore` (`core.py`) — the logic.** Plain request values in, session mutation + upstream proxy, Starlette `Response` out; knows nothing about processes, sockets, IPC, or HTTP servers.
+- **`SessionCore` (`core.py`) — the logic.** Plain request values in, session mutation + upstream proxy, Starlette `Response` out; knows nothing about processes, sockets, IPC, or HTTP servers. Also owns the training-sample assembly op (`collect_samples`, IPC `OP_SAMPLES`): records → `Sample`s inside the owning worker, so the accumulated dump never crosses IPC on the hot path.
 - **worker (`worker.py`) — one process, one shard.** Exactly one `SessionCore` plus its own httpx proxy backend; speaks IPC only: decode a request, call the core, serialize the `Response` back.
 - **router (`router.py`) — the single client-facing HTTP listener.** Hash-routes each request to the owning worker and forwards the reply back unchanged, without ever parsing it; imports neither core nor worker, so the router process stays tokenizer-free.
 - **supervisor (`supervisor.py`) — process lifecycle.** Spawns N workers + 1 router, waits for readiness, monitors and fail-fasts on any child death, tears the group down without orphans.
@@ -66,7 +66,7 @@ flowchart TD
 
 The supervisor spawns and monitors the router and every worker and fail-fasts on any death; it is never on a data path.
 
-Sessions are sticky-by-hash, so the chat path only ever carries a single turn's request/response over IPC — never accumulated session state. The records path is the exception: session records are never pruned (the training data path consumes R3 from them), so its reply is the full accumulated dump as one frame — see "Open decisions" for the measured consequences.
+Sessions are sticky-by-hash, so the chat path only ever carries a single turn's request/response over IPC — never accumulated session state. The training path consumes worker-assembled `Sample`s (`POST /sessions/{id}/samples`, assembled inside the owning worker; see `docs/developer/session-server-sample-assembly.md`), so records stay internal to the worker until DELETE. The debug-only records GET is the exception: records are never pruned, so its reply is the full accumulated dump as one frame — see "Open decisions" for the measured consequences.
 
 ## Behavior parity
 
@@ -85,7 +85,7 @@ The server must match the observable behavior of the original single-process ser
 
 Deliberately cut — reintroduce only with evidence: IPC chunking / round-robin writer / send-buffer budget / configurable frame limits (single-frame bodies instead; reopen rule below); per-worker 503 backpressure, `asyncio.shield` on client disconnect, and the router task-tracking set (cancel-safe request + late-reply drop instead); worker-side `max_inflight` / `max_queued_bytes` admission and the parse-gate semaphore; the prototype's 409 in-flight gate, 500 invariant, and stricter response validation (behavior changes, not part of the mechanism).
 
-- **Records-path head-of-line and router relay ceiling (accepted for now).** Measured with 32 concurrent full-records `GET /sessions/{id}` overlapping chats (w16, production shape): chat reply p99 collapses ~33× (1.6 s → 52 s) and a ~3.15 GiB GET averages ~103 s — the giant reply frame queues sibling chat replies behind it on the IPC channel (FIFO whole frames) and every byte re-serializes through the single router process. The chat path itself never sends large bodies over IPC (the large body is parsed inside the worker); benchmark provenance in "Goal". Accepted for this stack; the fix is decided and lands as a follow-up records-path PR (see "Not covered").
+- **Records-GET head-of-line (debug-only surface).** Historical hot-path measurements, kept for reference: 32 concurrent full-records `GET /sessions/{id}` overlapping chats (w16, production shape) collapsed chat reply p99 ~33× (1.6 s → 52 s), with a ~3.15 GiB GET averaging ~103 s — the giant reply frame queues sibling chat replies behind it on the IPC channel (FIFO whole frames) and every byte re-serializes through the single router process. The training path no longer crosses this endpoint (it collects worker-assembled samples, measured ~33× smaller replies); the records GET survives for human debugging only, and dumping a large session still has these costs while it runs.
 - **Single-frame large bodies.** A full-records `GET /sessions/{id}` reply crosses IPC as one in-memory frame — measured ~3.15 GiB per session at the production shape (records are never pruned, so it grows with turns × body size). This is why frame lengths are u64 with a 64 GiB cap enforced at send time: `_MAX_FRAME` is a corruption guard, not a size feature, and an oversized frame must fail only its own request — if it reached the peer's reader it would be indistinguishable from a corrupt length and tear down the channel, silently poisoning every other session on the shard.
 - **No client-disconnect shielding.** A cancelled client request drops only the router-side await (cancel-safe `request()` + late-reply drop); the worker handler runs as a separate task and still commits consistent state — pinned by a deterministic cancel test.
 - **No per-request dispatch timeout.** A dead worker surfaces as EOF → 503, but a live-but-hung worker leaves requests pending until the channel closes. Deliberate: `chat`/`proxy` legitimately run long (LLM generation), so a fixed timeout would false-positive on slow chats.
@@ -96,4 +96,4 @@ Deliberately cut — reintroduce only with evidence: IPC chunking / round-robin 
 - Consistent-hashing / rebalanceable routing — v1 is modulo over a stable hash; resizing the worker count at runtime is unsupported.
 - A delta / incremental-R3 protocol (would need SGLang/trainer coordination).
 - General backpressure / admission control / rate limiting.
-- TODO (decided, follow-up records-path PR): worker-direct bulk replies — the router 307-redirects the records GET to the owning worker's own listener, so the multi-GiB records body never crosses IPC or the router. Design and flowchart land with that PR.
+- Worker-direct bulk replies (the previously decided 307-redirect records-path TODO) — dissolved, not superseded: in-worker sample assembly removed the multi-GiB records body from the hot path, so the motivating measurements no longer describe it.

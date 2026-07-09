@@ -1,6 +1,6 @@
 # Worker 内样本装配:records 不再离开 session server
 
-状态:proposal(multi-process session server stack 的后续,见 `docs/developer/multi-process-session-server.md`)。读者:该 stack 的 reviewer。读完你应当能判断:所有权边界的改动是否正确、新端点契约是否可靠、宣称的 parity 是否真正可验证。
+状态:implemented——PR https://github.com/radixark/miles/pull/1605(multi-process session server stack 的 9/N,基于 #1602;实测验收数字见该 PR)。前身文档:`docs/developer/multi-process-session-server.md`。读者:该 stack 的 reviewer。读完你应当能判断:所有权边界的改动是否正确、新端点契约是否可靠、宣称的 parity 是否真正可验证。
 
 ## 动机
 

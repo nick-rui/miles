@@ -6,6 +6,7 @@ HTTP-agnostic: the session worker (`worker.py`) decodes each request off IPC int
 - `create_session(session_id=None)`: the router generates the id and passes it so the owning worker creates the trajectory under it; with None the registry generates one itself (tests that call the core directly).
 - `chat_completions` strips the R3 replay payloads (`routed_experts` / `indexer_topk`) from the client reply copy-on-write; the `SessionRecord` keeps the full response for the training path (`GET /sessions/{id}`).
 - `chat_completions` holds the per-session lock for prep and state update but not across the proxy call; `closing` re-checks and the `num_assistant` check gate concurrent DELETE/chat.
+- `collect_samples` assembles training Samples from the session's records in-worker (compute -> truncate -> merge, synchronously on the loop like the lock-free `get_session`); deterministic assembly failures return 422 with the assertion text.
 """
 
 import json
