@@ -37,15 +37,7 @@ class OpenAIEndpointTracer:
                 "Pass --use-session-server to start the session server."
             )
         session_url = f"http://{session_ip}:{session_port}"
-        session_server_instance_id = None
-        try:
-            health = await post(f"{session_url}/health", {}, action="get")
-            if isinstance(health, dict):
-                session_server_instance_id = health.get("session_server_instance_id")
-                if session_server_instance_id is not None:
-                    args.session_server_instance_id = session_server_instance_id
-        except Exception as e:
-            logger.warning("Failed to get session server health from %s: %s", session_url, e)
+        session_server_instance_id = getattr(args, "session_server_instance_id", None)
         response = await post(f"{session_url}/sessions", {}, action="post")
         session_id = response["session_id"]
         return OpenAIEndpointTracer(

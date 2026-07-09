@@ -92,16 +92,33 @@ def _make_record(
 
 
 @pytest.mark.asyncio
-async def test_create_fetches_session_server_instance_id(monkeypatch):
+async def test_create_reads_session_server_instance_id_from_args(monkeypatch):
     calls: list[tuple[str, str]] = []
 
     async def fake_post(url: str, payload: dict, action: str = "post"):
         calls.append((action, url))
-        if action == "get":
-            assert url == "http://127.0.0.1:12345/health"
-            return {"status": "ok", "session_server_instance_id": "server-instance-123"}
         assert action == "post"
         assert url == "http://127.0.0.1:12345/sessions"
+        return {"session_id": "session-123"}
+
+    monkeypatch.setattr("miles.rollout.generate_utils.openai_endpoint_utils.post", fake_post)
+
+    args = SimpleNamespace(
+        session_server_ip="127.0.0.1",
+        session_server_port=12345,
+        session_server_instance_id="server-instance-123",
+    )
+    tracer = await OpenAIEndpointTracer.create(args)
+
+    assert tracer.base_url == "http://127.0.0.1:12345/sessions/session-123"
+    assert tracer.session_server_instance_id == "server-instance-123"
+    # No /health probe: the id is read locally, create() issues only the POST.
+    assert calls == [("post", "http://127.0.0.1:12345/sessions")]
+
+
+@pytest.mark.asyncio
+async def test_create_without_instance_id_on_args(monkeypatch):
+    async def fake_post(url: str, payload: dict, action: str = "post"):
         return {"session_id": "session-123"}
 
     monkeypatch.setattr("miles.rollout.generate_utils.openai_endpoint_utils.post", fake_post)
@@ -109,13 +126,7 @@ async def test_create_fetches_session_server_instance_id(monkeypatch):
     args = SimpleNamespace(session_server_ip="127.0.0.1", session_server_port=12345)
     tracer = await OpenAIEndpointTracer.create(args)
 
-    assert tracer.base_url == "http://127.0.0.1:12345/sessions/session-123"
-    assert tracer.session_server_instance_id == "server-instance-123"
-    assert args.session_server_instance_id == "server-instance-123"
-    assert calls == [
-        ("get", "http://127.0.0.1:12345/health"),
-        ("post", "http://127.0.0.1:12345/sessions"),
-    ]
+    assert tracer.session_server_instance_id is None
 
 
 # ── test: compute_samples_from_openai_records ────────────────────────
