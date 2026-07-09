@@ -6,7 +6,7 @@ import asyncio
 import logging
 from argparse import Namespace
 
-from miles.rollout.session.sample_assembly import SamplesReply, decode_samples_reply
+from miles.rollout.session.reply_utils import SamplesReply, decode_samples_reply
 from miles.utils.http_utils import post, post_bytes_no_retry
 from miles.utils.types import Sample
 

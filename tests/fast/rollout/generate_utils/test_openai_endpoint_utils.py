@@ -1,7 +1,8 @@
 """Tests for OpenAIEndpointTracer (session-server client side).
 
 The sample-assembly and TITO multi-turn merge tests live in
-tests/fast/rollout/session/test_sample_assembly.py, next to the functions.
+tests/fast/rollout/session/test_records_utils.py (assembly) and
+test_reply_utils.py (wire codec), next to the functions.
 The collect_samples tests here lock the client's HTTP behavior deltas vs the
 old collect_records path: single POST with no retries, non-2xx raises with the
 body text, timeout raises (instead of silently ABORTing), and the session
@@ -15,7 +16,7 @@ import pytest
 
 import miles.utils.http_utils as http_utils
 from miles.rollout.generate_utils.openai_endpoint_utils import OpenAIEndpointTracer
-from miles.rollout.session.sample_assembly import encode_samples_reply
+from miles.rollout.session.reply_utils import encode_samples_reply
 from miles.utils.http_utils import post_bytes_no_retry
 from miles.utils.types import Sample
 

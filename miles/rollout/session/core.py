@@ -25,11 +25,8 @@ from miles.rollout.session.errors import (
     UpstreamResponseError,
 )
 from miles.rollout.session.linear_trajectory import SessionRegistry
-from miles.rollout.session.sample_assembly import (
-    compute_samples_from_openai_records,
-    encode_samples_reply,
-    truncate_samples_by_total_tokens,
-)
+from miles.rollout.session.records_utils import compute_samples_from_openai_records, truncate_samples_by_total_tokens
+from miles.rollout.session.reply_utils import encode_samples_reply
 from miles.rollout.session.types import GetSessionResponse, SessionRecord
 from miles.utils.chat_template_utils import get_tito_tokenizer
 from miles.utils.processing_utils import load_tokenizer

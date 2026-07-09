@@ -20,7 +20,7 @@ import numpy as np
 import pybase64
 import pytest
 from fastapi.testclient import TestClient
-from tests.fast.rollout.session.test_sample_assembly import _make_record
+from tests.fast.rollout.session.test_records_utils import _make_record
 
 from miles.rollout.generate_utils.sample_utils import merge_samples
 from miles.rollout.session.core import build_session_core
@@ -32,12 +32,9 @@ from miles.rollout.session.ipc import (
     encode_envelope,
     encode_request,
 )
+from miles.rollout.session.records_utils import compute_samples_from_openai_records, truncate_samples_by_total_tokens
+from miles.rollout.session.reply_utils import decode_samples_reply
 from miles.rollout.session.router import build_router_app
-from miles.rollout.session.sample_assembly import (
-    compute_samples_from_openai_records,
-    decode_samples_reply,
-    truncate_samples_by_total_tokens,
-)
 from miles.rollout.session.worker import SessionWorker
 from miles.utils.types import Sample
 
