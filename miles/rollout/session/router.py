@@ -29,6 +29,7 @@ from miles.rollout.session.ipc import (
     OP_GET,
     OP_HEALTH,
     OP_PROXY,
+    OP_SAMPLES,
     IpcChannelClosed,
     IpcError,
     decode_envelope,
@@ -143,6 +144,16 @@ def build_router_app(channels: list, session_server_instance_id=None) -> FastAPI
             body=body,
         )
         return await router.dispatch(router.channel_for(session_id), payload)
+
+    @app.post("/sessions/{session_id}/samples")
+    async def collect_samples(request: Request, session_id: str):
+        # Must stay registered BEFORE the catch-all session_proxy below: Starlette
+        # matches in registration order, and the catch-all would otherwise swallow
+        # this path into OP_PROXY and forward it to the inference backend.
+        body = await request.body()
+        return await router.dispatch(
+            router.channel_for(session_id), encode_request(OP_SAMPLES, session_id=session_id, body=body)
+        )
 
     @app.api_route("/sessions/{session_id}/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH"])
     async def session_proxy(request: Request, session_id: str, path: str):

@@ -90,6 +90,7 @@ OP_CREATE = "create"
 OP_GET = "get"
 OP_DELETE = "delete"
 OP_CHAT = "chat"
+OP_SAMPLES = "samples"
 OP_PROXY = "proxy"
 
 

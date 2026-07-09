@@ -29,6 +29,7 @@ from miles.rollout.session.ipc import (
     OP_GET,
     OP_HEALTH,
     OP_PROXY,
+    OP_SAMPLES,
     decode_envelope,
     encode_envelope,
     open_unix_channel,
@@ -109,6 +110,16 @@ class SessionWorker:
         if op == OP_CHAT:
             return await self.core.chat_completions(
                 meta["session_id"], method=meta["method"], query=meta["query"], headers=meta["headers"], body=body
+            )
+        if op == OP_SAMPLES:
+            # Request params are parsed here, OUTSIDE core.collect_samples's 422
+            # lane: a malformed body is a protocol violation (ERROR frame → 502),
+            # not an assembly failure.
+            params = json.loads(body) if body else {}
+            return await self.core.collect_samples(
+                meta["session_id"],
+                multi_samples=bool(params.get("multi_samples", False)),
+                max_seq_len=params.get("max_seq_len"),
             )
         if op == OP_PROXY:
             return await self.core.proxy(
