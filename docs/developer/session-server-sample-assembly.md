@@ -85,7 +85,7 @@ A 的事实基础:`Sample` 的 26 个字段里,worker **算出**的只有这些�
 ### Worker 侧流程(与 `agentic_tool_call.generate` 93–129 行逐一对应)
 
 1. `records = session.records`;为空 → 回复 `{"samples": [], "empty_reason": "no_records"}`。
-2. `compute_samples_from_openai_records(args, input_sample, records, tokenizer, accumulated_token_ids, max_trim_tokens)` —— 后两个参数直接读 worker 自己的 session 状态,不再跨 wire 往返。
+2. `compute_samples_from_openai_records(args, records, tokenizer, accumulated_token_ids, max_trim_tokens)` —— 后两个参数直接读 worker 自己的 session 状态,不再跨 wire 往返;装配在空白 `Sample()` 模板上进行,签名不接收 `input_sample`(结构上保证 worker 看不到 driver 的 template 字段)。
 3. 若有 `max_seq_len`:`truncate_samples_by_total_tokens`;全截断 → 回复 `{"samples": [], "empty_reason": "all_truncated"}`。truncation 保持在 merge **之前**——它是 turn 级预算决策(哪些轮存活;超限轮在轮边界裁剪、其后各轮丢弃),而轮结构只在 merge 前存在;同一调用点还统一覆盖 `multi_samples` 模式,并在 deepcopy 密集的 merge 之前剪枝。`records_utils.py` 模块头记录此顺序契约。
 4. 若非 `multi_samples`:`merge_samples`;`session_metadata`(与今日 `get_session` 构建的同一 dict:`tito_session_mismatch`、`accumulated_token_ids`、`max_trim_tokens`)随回复带回、由 driver 侧 apply——最终位置与今日相同(merged sample,或 `samples[-1]`)。该 dict 的构建今天内联在 `get_session` 里(`core.py:139-148`);samples op 要"同源不 fork"就必须把它抽成 helper、两个 op 共用——所以 c2 对既有 `get_session` 有一处**纯抽取**改动(行为不变),不是严格 additive(milestone review 发现)。
 5. 回复装配好的 samples 及 `empty_reason`(形状见上方 wire format 决定)。

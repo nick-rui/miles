@@ -14,6 +14,7 @@ the cutover. Every `Sample` dataclass field must match.
 import dataclasses
 import json
 import uuid
+from copy import deepcopy
 from types import SimpleNamespace
 
 import numpy as np
@@ -33,7 +34,7 @@ from miles.rollout.session.ipc import (
     encode_request,
 )
 from miles.rollout.session.records_utils import compute_samples_from_openai_records, truncate_samples_by_total_tokens
-from miles.rollout.session.reply_utils import decode_samples_reply
+from miles.rollout.session.reply_utils import COMPUTED_FIELDS, decode_samples_reply
 from miles.rollout.session.router import build_router_app
 from miles.rollout.session.worker import SessionWorker
 from miles.utils.types import Sample
@@ -155,16 +156,27 @@ def _new_pipeline(payload, input_sample, *, multi_samples):
 
 
 def _old_pipeline(worker, records, input_sample, *, multi_samples, max_seq_len, session_metadata):
-    """agentic_tool_call.generate lines 96-129, verbatim semantics."""
+    """agentic_tool_call.generate lines 96-129 semantics.
+
+    The legacy pipeline deepcopied `input_sample` per turn; since assembly now
+    builds on blank templates, that step is emulated by overlaying each blank
+    sample's computed fields onto a deepcopy — equivalent under the overlay
+    defaults guard, which the fixtures satisfy.
+    """
     tokenizer = worker.core.registry.tokenizer
-    samples = compute_samples_from_openai_records(
+    blanks = compute_samples_from_openai_records(
         _ARGS,
-        input_sample,
         records,
         tokenizer,
         accumulated_token_ids=session_metadata.get("accumulated_token_ids"),
         max_trim_tokens=session_metadata.get("max_trim_tokens", 0),
     )
+    samples = []
+    for blank in blanks:
+        s = deepcopy(input_sample)
+        for name in COMPUTED_FIELDS:
+            setattr(s, name, getattr(blank, name))
+        samples.append(s)
     for s in samples:
         s.metadata.update(_AGENT_METADATA)
     if max_seq_len is not None:

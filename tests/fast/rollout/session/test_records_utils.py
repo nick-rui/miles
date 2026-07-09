@@ -25,22 +25,6 @@ def _mock_tokenizer():
     return tok
 
 
-def _make_input_sample(**overrides):
-    defaults = dict(
-        group_index=0,
-        index=0,
-        prompt="test prompt",
-        tokens=[],
-        response="",
-        response_length=0,
-        status=Sample.Status.PENDING,
-        label="test",
-        reward=1.0,
-    )
-    defaults.update(overrides)
-    return Sample(**defaults)
-
-
 def _make_record(
     prompt_token_ids: list[int],
     output_token_ids: list[int],
@@ -106,9 +90,8 @@ class TestComputeSamplesFromRecords:
             output_token_ids=[10, 11],
             output_log_probs=[-0.5, -0.6],
         )
-        input_sample = _make_input_sample()
 
-        samples = compute_samples_from_openai_records(_ARGS, input_sample, [record], tok)
+        samples = compute_samples_from_openai_records(_ARGS, [record], tok)
 
         assert len(samples) == 1
         s = samples[0]
@@ -124,9 +107,8 @@ class TestComputeSamplesFromRecords:
             _make_record(prompt_token_ids=[1, 2], output_token_ids=[10]),
             _make_record(prompt_token_ids=[1, 2, 10, 20], output_token_ids=[30]),
         ]
-        input_sample = _make_input_sample()
 
-        samples = compute_samples_from_openai_records(_ARGS, input_sample, records, tok)
+        samples = compute_samples_from_openai_records(_ARGS, records, tok)
 
         assert len(samples) == 2
         assert samples[0].tokens == [1, 2, 10]
@@ -139,9 +121,8 @@ class TestComputeSamplesFromRecords:
             output_token_ids=[10],
             finish_reason="length",
         )
-        input_sample = _make_input_sample()
 
-        samples = compute_samples_from_openai_records(_ARGS, input_sample, [record], tok)
+        samples = compute_samples_from_openai_records(_ARGS, [record], tok)
 
         assert samples[0].status == Sample.Status.TRUNCATED
 
@@ -177,9 +158,8 @@ class TestMultiTurnPrefixChain:
                 output_log_probs=[-0.3, -0.4],
             ),
         ]
-        input_sample = _make_input_sample()
 
-        samples = compute_samples_from_openai_records(_ARGS, input_sample, records, tok)
+        samples = compute_samples_from_openai_records(_ARGS, records, tok)
         merged = merge_samples(samples, tok)
 
         assert merged.tokens == [1, 2, 3, 10, 11, 20, 21, 30, 31]
@@ -208,9 +188,8 @@ class TestMultiTurnPrefixChain:
                 output_log_probs=[-0.3],
             ),
         ]
-        input_sample = _make_input_sample()
 
-        samples = compute_samples_from_openai_records(_ARGS, input_sample, records, tok)
+        samples = compute_samples_from_openai_records(_ARGS, records, tok)
         merged = merge_samples(samples, tok)
 
         assert merged.tokens == [1, 2, 10, 20, 30, 40, 50]
@@ -231,9 +210,8 @@ class TestMultiTurnPrefixChain:
                 output_token_ids=[30, 31],
             ),
         ]
-        input_sample = _make_input_sample()
 
-        samples = compute_samples_from_openai_records(_ARGS, input_sample, records, tok)
+        samples = compute_samples_from_openai_records(_ARGS, records, tok)
 
         with pytest.raises(AssertionError, match="b.tokens must start with a.tokens"):
             merge_samples(samples, tok)
@@ -251,8 +229,7 @@ class TestMultiTurnPrefixChain:
                 output_log_probs=[-0.3, -0.4],
             ),
         ]
-        input_sample = _make_input_sample()
-        samples = compute_samples_from_openai_records(_ARGS, input_sample, records, tok)
+        samples = compute_samples_from_openai_records(_ARGS, records, tok)
 
         # OPD attaches per-response-token teacher log-probs to each turn's sample.
         samples[0].teacher_log_probs = [-1.0, -1.1]
@@ -277,8 +254,7 @@ class TestMultiTurnPrefixChain:
                 output_log_probs=[-0.3, -0.4],
             ),
         ]
-        input_sample = _make_input_sample()
-        samples = compute_samples_from_openai_records(_ARGS, input_sample, records, tok)
+        samples = compute_samples_from_openai_records(_ARGS, records, tok)
 
         turn_0_top_logprobs = [[[-0.1, 101]], [[-0.2, 102]]]
         turn_1_top_logprobs = [[[-0.3, 103]], [[-0.4, 104]]]
@@ -310,8 +286,7 @@ class TestMultiTurnPrefixChain:
             _make_record(prompt_token_ids=[1, 2, 3], output_token_ids=[10, 11]),
             _make_record(prompt_token_ids=[1, 2, 3, 10, 11, 20, 21], output_token_ids=[30, 31]),
         ]
-        input_sample = _make_input_sample()
-        samples = compute_samples_from_openai_records(_ARGS, input_sample, records, tok)
+        samples = compute_samples_from_openai_records(_ARGS, records, tok)
 
         merged = merge_samples(samples, tok)
 
@@ -325,8 +300,7 @@ class TestMultiTurnPrefixChain:
             _make_record(prompt_token_ids=[1, 2, 3], output_token_ids=[10, 11]),
             _make_record(prompt_token_ids=[1, 2, 3, 10, 11, 20, 21], output_token_ids=[30, 31]),
         ]
-        input_sample = _make_input_sample()
-        samples = compute_samples_from_openai_records(_ARGS, input_sample, records, tok)
+        samples = compute_samples_from_openai_records(_ARGS, records, tok)
 
         samples[0].teacher_log_probs = [-1.0]  # length 1 != response_length 2
 
@@ -407,11 +381,9 @@ class TestTITOTrailingTokenTrim:
             _make_record(prompt_token_ids=[1, 2, 3, 10, 4, 5, 6, 20, 7, 8, 9], output_token_ids=[30, STOP]),
         ]
         accumulated = [1, 2, 3, 10, 4, 5, 6, 20, 7, 8, 9, 30, STOP]
-        input_sample = _make_input_sample()
 
         samples = compute_samples_from_openai_records(
             _ARGS,
-            input_sample,
             records,
             tok,
             accumulated_token_ids=accumulated,
@@ -442,11 +414,9 @@ class TestTITOTrailingTokenTrim:
             _make_record(prompt_token_ids=[1, 2, 10, 11, 3, 4], output_token_ids=[20, 21]),
         ]
         accumulated = [1, 2, 10, 11, 3, 4, 20, 21]
-        input_sample = _make_input_sample()
 
         samples = compute_samples_from_openai_records(
             _ARGS,
-            input_sample,
             records,
             tok,
             accumulated_token_ids=accumulated,
@@ -467,11 +437,9 @@ class TestTITOTrailingTokenTrim:
             _make_record(prompt_token_ids=[1, 2, 3], output_token_ids=[10, 11, STOP]),
         ]
         accumulated = [1, 2, 3, 10, 11, STOP]
-        input_sample = _make_input_sample()
 
         samples = compute_samples_from_openai_records(
             _ARGS,
-            input_sample,
             records,
             tok,
             accumulated_token_ids=accumulated,
@@ -490,11 +458,9 @@ class TestTITOTrailingTokenTrim:
             _make_record(prompt_token_ids=[1, 2], output_token_ids=[10, STOP]),
             _make_record(prompt_token_ids=[1, 2, 10, STOP, 3, 4], output_token_ids=[20, STOP]),
         ]
-        input_sample = _make_input_sample()
 
         samples = compute_samples_from_openai_records(
             _ARGS,
-            input_sample,
             records,
             tok,
             accumulated_token_ids=None,
@@ -517,12 +483,10 @@ class TestTITOTrailingTokenTrim:
             _make_record(prompt_token_ids=[1, 2, 10, 3, 4], output_token_ids=[20]),
         ]
         accumulated = [1, 2, 10, 3, 4, 20]
-        input_sample = _make_input_sample()
 
         with pytest.raises(AssertionError, match="trim_count 2 exceeds allowed=1"):
             compute_samples_from_openai_records(
                 _ARGS,
-                input_sample,
                 records,
                 tok,
                 accumulated_token_ids=accumulated,
@@ -540,12 +504,10 @@ class TestTITOTrailingTokenTrim:
         ]
         # Missing the last token — accumulated should be [1,2,10,3,20] but we give [1,2,10,3,20,99]
         accumulated = [1, 2, 10, 3, 20, 99]
-        input_sample = _make_input_sample()
 
         with pytest.raises(AssertionError, match="cursor .* != len\\(accumulated_token_ids\\)"):
             compute_samples_from_openai_records(
                 _ARGS,
-                input_sample,
                 records,
                 tok,
                 accumulated_token_ids=accumulated,
@@ -603,9 +565,8 @@ class TestThinkingTokenPrefixBreak:
                 output_token_ids=[30, 31],
             ),
         ]
-        input_sample = _make_input_sample()
 
-        samples = compute_samples_from_openai_records(_ARGS, input_sample, records, tok)
+        samples = compute_samples_from_openai_records(_ARGS, records, tok)
 
         # sample[0].tokens = [1,2,3] + thinking + [10,11] = [1,2,3, <think>,\n,42,43,\n,</think>,\n, 10,11]
         # sample[1].tokens = [1,2,3, 10,11, 20,21, 30,31]
@@ -628,9 +589,8 @@ class TestThinkingTokenPrefixBreak:
                 output_token_ids=[30, 31],
             ),
         ]
-        input_sample = _make_input_sample()
 
-        samples = compute_samples_from_openai_records(_ARGS, input_sample, records, tok)
+        samples = compute_samples_from_openai_records(_ARGS, records, tok)
         merged = merge_samples(samples, tok)
 
         assert merged.tokens == [1, 2, 3, 10, 11, 20, 21, 30, 31]
@@ -651,8 +611,7 @@ class TestPrefixCacheInfo:
             cached_tokens=2,
             prompt_tokens=3,
         )
-        input_sample = _make_input_sample()
-        samples = compute_samples_from_openai_records(_ARGS, input_sample, [record], tok)
+        samples = compute_samples_from_openai_records(_ARGS, [record], tok)
 
         assert samples[0].prefix_cache_info.cached_tokens == 2
         assert samples[0].prefix_cache_info.total_prompt_tokens == 3
@@ -676,8 +635,7 @@ class TestPrefixCacheInfo:
                 prompt_tokens=7,
             ),
         ]
-        input_sample = _make_input_sample()
-        samples = compute_samples_from_openai_records(_ARGS, input_sample, records, tok)
+        samples = compute_samples_from_openai_records(_ARGS, records, tok)
         merged = merge_samples(samples, tok)
 
         assert merged.prefix_cache_info.cached_tokens == 0 + 5
@@ -691,8 +649,7 @@ class TestPrefixCacheInfo:
             prompt_token_ids=[1, 2, 3],
             output_token_ids=[10, 11],
         )
-        input_sample = _make_input_sample()
-        samples = compute_samples_from_openai_records(_ARGS, input_sample, [record], tok)
+        samples = compute_samples_from_openai_records(_ARGS, [record], tok)
 
         assert samples[0].prefix_cache_info.cached_tokens == 0
         assert samples[0].prefix_cache_info.total_prompt_tokens == 0

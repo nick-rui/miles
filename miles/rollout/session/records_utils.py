@@ -11,11 +11,12 @@ session worker (records never have to leave the session server).
   `merge_samples` — truncation is a turn-level budget decision (which turns
   survive; the overflowing turn is cut at a turn boundary, later turns are
   dropped) and the turn structure only exists pre-merge.
-- The wire codec for the assembled samples lives in `reply_utils.py`.
+- Assembly builds each per-turn `Sample` from a blank template and populates
+  only the computed fields; the driver's input-sample (template) fields never
+  enter the worker — the driver overlays them, see `reply_utils.py`.
 """
 
 from argparse import Namespace
-from copy import deepcopy
 
 from miles.rollout.generate_utils.generate_endpoint_utils import (
     get_indexer_topk_from_response,
@@ -27,7 +28,6 @@ from miles.utils.types import Sample
 
 def compute_samples_from_openai_records(
     args: Namespace,
-    input_sample: Sample,
     records: list[SessionRecord],
     tokenizer,
     accumulated_token_ids: list[int] | None = None,
@@ -83,7 +83,7 @@ def compute_samples_from_openai_records(
             # Step 4: advance cursor past matched output to the next turn
             cursor += matched
 
-        sample = _compute_sample_from_openai_record(args, input_sample, record, tokenizer, trim_count)
+        sample = _compute_sample_from_openai_record(args, record, tokenizer, trim_count)
         samples.append(sample)
 
     if accumulated_token_ids is not None:
@@ -97,7 +97,7 @@ def compute_samples_from_openai_records(
 
 
 def _compute_sample_from_openai_record(
-    args: Namespace, input_sample: Sample, record: SessionRecord, tokenizer, trim_count: int = 0
+    args: Namespace, record: SessionRecord, tokenizer, trim_count: int = 0
 ) -> Sample:
     choice = record.response["choices"][0]
 
@@ -108,7 +108,7 @@ def _compute_sample_from_openai_record(
     output_token_ids = [item[1] for item in choice["meta_info"]["output_token_logprobs"]]
     output_log_probs = [item[0] for item in choice["meta_info"]["output_token_logprobs"]]
 
-    sample = deepcopy(input_sample)
+    sample = Sample()
     sample.tokens = prompt_token_ids + output_token_ids
     sample.rollout_log_probs = output_log_probs
     sample.response = tokenizer.decode(output_token_ids)

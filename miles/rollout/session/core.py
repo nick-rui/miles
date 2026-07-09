@@ -30,7 +30,6 @@ from miles.rollout.session.reply_utils import encode_samples_reply
 from miles.rollout.session.types import GetSessionResponse, SessionRecord
 from miles.utils.chat_template_utils import get_tito_tokenizer
 from miles.utils.processing_utils import load_tokenizer
-from miles.utils.types import Sample
 
 logger = logging.getLogger(__name__)
 
@@ -192,7 +191,6 @@ class SessionCore:
         try:
             samples = compute_samples_from_openai_records(
                 self.args,
-                Sample(),
                 session.records,
                 tokenizer,
                 accumulated_token_ids=metadata.get("accumulated_token_ids"),
