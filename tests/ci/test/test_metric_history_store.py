@@ -35,19 +35,26 @@ PROVENANCE = RunProvenance(
 )
 
 # Canonical-JSON declaration keys, as the parser would derive them from a
-# test file's literal extractor / constraint dicts.
-LAST_EXTRACTOR = '{"name":"last"}'
-STEPS_EXTRACTOR = '{"name":"steps","steps":[0,1]}'
-REL_RULE = '{"name":"rel","rel":0.2}'
-ABS_RULE = '{"abs_floor":0.02,"name":"abs"}'
+# test file's literal steps / constraint values.
+LAST_STEPS_KEY = '"last"'
+STEP_LIST_KEY = "[0,1]"
+REL_CONSTRAINT_KEY = '{"rel":0.2}'
+ABS_CONSTRAINT_KEY = '{"abs_floor":0.02}'
 
 
-def _sample(metric_key, value, *, steps_key=LAST_EXTRACTOR, constraint_key=REL_RULE, step=-1):
+def _sample(metric_key, value, *, steps_key=LAST_STEPS_KEY, constraint_key=REL_CONSTRAINT_KEY, step=-1):
     return MetricSample(metric_key, steps_key, constraint_key, step, value)
 
 
 def _recent(
-    store, metric_key, *, steps_key=LAST_EXTRACTOR, constraint_key=REL_RULE, step=-1, identity=IDENTITY, limit=10
+    store,
+    metric_key,
+    *,
+    steps_key=LAST_STEPS_KEY,
+    constraint_key=REL_CONSTRAINT_KEY,
+    step=-1,
+    identity=IDENTITY,
+    limit=10,
 ):
     return store.recent_trusted_values(
         identity.test_path,
@@ -147,8 +154,8 @@ def test_coordinate_isolation(store):
         created_at="2026-06-01T00:00:00+00:00",
         values=[
             _sample("pass_rate", 0.70),
-            _sample("pass_rate", 0.60, steps_key=STEPS_EXTRACTOR, step=0),
-            _sample("pass_rate", 0.80, constraint_key=ABS_RULE),
+            _sample("pass_rate", 0.60, steps_key=STEP_LIST_KEY, step=0),
+            _sample("pass_rate", 0.80, constraint_key=ABS_CONSTRAINT_KEY),
             _sample("pass_rate", 0.90, step=0),
         ],
     )
@@ -156,8 +163,8 @@ def test_coordinate_isolation(store):
     # Each exact coordinate matches only its own row: plain equality on every
     # column, no cross-matching.
     assert _recent(store, "pass_rate") == [0.70]
-    assert _recent(store, "pass_rate", steps_key=STEPS_EXTRACTOR, step=0) == [0.60]
-    assert _recent(store, "pass_rate", constraint_key=ABS_RULE) == [0.80]
+    assert _recent(store, "pass_rate", steps_key=STEP_LIST_KEY, step=0) == [0.60]
+    assert _recent(store, "pass_rate", constraint_key=ABS_CONSTRAINT_KEY) == [0.80]
     assert _recent(store, "pass_rate", step=0) == [0.90]
 
 

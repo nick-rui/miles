@@ -45,12 +45,12 @@ CREATE TABLE IF NOT EXISTS runs (
 );
 
 CREATE TABLE IF NOT EXISTS metric_values (
-    run_id         TEXT NOT NULL REFERENCES runs(run_id),
-    metric_key     TEXT NOT NULL,
-    steps_key  TEXT NOT NULL,
-    constraint_key       TEXT NOT NULL,
-    step           INTEGER NOT NULL,
-    value          REAL NOT NULL
+    run_id          TEXT NOT NULL REFERENCES runs(run_id),
+    metric_key      TEXT NOT NULL,
+    steps_key       TEXT NOT NULL,
+    constraint_key  TEXT NOT NULL,
+    step            INTEGER NOT NULL,
+    value           REAL NOT NULL
 );
 
 CREATE INDEX IF NOT EXISTS runs_baseline_idx
