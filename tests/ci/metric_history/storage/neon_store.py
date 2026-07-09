@@ -32,7 +32,13 @@ from __future__ import annotations
 import os
 import uuid
 
-from tests.ci.metric_history.storage.store import MetricHistoryStore, MetricSample, RunIdentity, RunProvenance
+from tests.ci.metric_history.storage.store import (
+    MetricHistoryStore,
+    MetricSample,
+    RunIdentity,
+    RunProvenance,
+    validate_finite_values,
+)
 
 #: Name of the environment variable carrying the Neon Postgres DSN. The value
 #: is provisioned out-of-band as a CI secret.
@@ -99,6 +105,7 @@ class NeonMetricHistoryStore(MetricHistoryStore):
         trusted: bool,
         values: list[MetricSample],
     ) -> str:
+        validate_finite_values(values)
         run_id = uuid.uuid4().hex
         try:
             with self._conn.cursor() as cur:

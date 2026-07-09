@@ -44,11 +44,11 @@ PROVENANCE = RunProvenance(
 )
 
 # Canonical-JSON declaration keys, as the parser derives them.
-LAST_STEPS = '{"name":"last"}'
-REL_RULE = '{"name":"rel","rel":0.2}'
+LAST_STEPS_KEY = '"last"'
+REL_CONSTRAINT_KEY = '{"rel":0.2}'
 
 
-def _sample(metric_key, value, *, steps_key=LAST_STEPS, constraint_key=REL_RULE, step=-1):
+def _sample(metric_key, value, *, steps_key=LAST_STEPS_KEY, constraint_key=REL_CONSTRAINT_KEY, step=-1):
     return MetricSample(metric_key, steps_key, constraint_key, step, value)
 
 
@@ -197,9 +197,9 @@ def test_write_run_single_transaction_one_commit(store, fake_conn):
     mv_kind, mv_sql, mv_seq = fake_conn.events[1]
     assert "insert into metric_values" in mv_sql
     assert mv_seq == [
-        (run_id, "reward_mean", LAST_STEPS, REL_RULE, -1, 0.83),
-        (run_id, "pass_rate", LAST_STEPS, REL_RULE, 0, 0.6),
-        (run_id, "pass_rate", LAST_STEPS, REL_RULE, 1, 0.8),
+        (run_id, "reward_mean", LAST_STEPS_KEY, REL_CONSTRAINT_KEY, -1, 0.83),
+        (run_id, "pass_rate", LAST_STEPS_KEY, REL_CONSTRAINT_KEY, 0, 0.6),
+        (run_id, "pass_rate", LAST_STEPS_KEY, REL_CONSTRAINT_KEY, 1, 0.8),
     ]
 
 
@@ -210,6 +210,23 @@ def test_write_run_rolls_back_on_error(store, fake_conn):
     assert fake_conn.commit_count == 0
     assert fake_conn.rollback_count == 1
     assert ("rollback", None, None) in fake_conn.events
+
+
+def test_write_run_rejects_non_finite_before_any_statement(store, fake_conn):
+    # The DB is the write boundary where validity is enforced (store contract:
+    # validate_finite_values); the raise must land before any SQL is issued.
+    for bad in (float("nan"), float("inf"), float("-inf")):
+        with pytest.raises(ValueError, match="non-finite"):
+            store.write_run(
+                IDENTITY,
+                PROVENANCE,
+                "2026-06-02T00:00:00+00:00",
+                True,
+                [_sample("m", 0.5), _sample("m", bad, step=0)],
+            )
+    assert fake_conn.events == []
+    assert fake_conn.commit_count == 0
+    assert fake_conn.rollback_count == 0
 
 
 # --------------------------------------------------------------------------- #
@@ -224,8 +241,8 @@ def test_recent_trusted_values_issues_baseline_join(store, fake_conn):
         IDENTITY.backend,
         IDENTITY.suite,
         "reward_mean",
-        LAST_STEPS,
-        REL_RULE,
+        LAST_STEPS_KEY,
+        REL_CONSTRAINT_KEY,
         -1,
         limit=10,
     )
@@ -256,8 +273,8 @@ def test_recent_trusted_values_issues_baseline_join(store, fake_conn):
         IDENTITY.backend,
         IDENTITY.suite,
         "reward_mean",
-        LAST_STEPS,
-        REL_RULE,
+        LAST_STEPS_KEY,
+        REL_CONSTRAINT_KEY,
         -1,
         10,
     )
@@ -388,8 +405,8 @@ def test_live_postgres_round_trip():
             identity.backend,
             identity.suite,
             "m",
-            LAST_STEPS,
-            REL_RULE,
+            LAST_STEPS_KEY,
+            REL_CONSTRAINT_KEY,
             -1,
             limit=10,
         )
@@ -402,8 +419,8 @@ def test_live_postgres_round_trip():
             identity.backend,
             identity.suite,
             "m",
-            LAST_STEPS,
-            REL_RULE,
+            LAST_STEPS_KEY,
+            REL_CONSTRAINT_KEY,
             -1,
             limit=10,
         )
