@@ -4,10 +4,17 @@ import time
 import urllib.request
 
 from tests.ci.ci_register import register_cuda_ci
+from tests.ci.metric_history import register_ci_gate
 
 import miles.utils.external_utils.command_utils as U
 
 register_cuda_ci(est_time=900, suite="stage-c-8-gpu-h100", labels=["short"])
+
+register_ci_gate(metric_key="train/grad_norm")
+register_ci_gate(metric_key="train/ppo_kl")
+register_ci_gate(metric_key="train/train_rollout_logprob_abs_diff")
+register_ci_gate(metric_key="train/train_rollout_kl")
+register_ci_gate(metric_key="rollout/raw_reward")
 
 TIGHT_DEVICE_MEMORY = U.get_bool_env_var("MILES_TEST_TIGHT_DEVICE_MEMORY", "1")
 

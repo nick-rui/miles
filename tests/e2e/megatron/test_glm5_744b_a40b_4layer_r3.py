@@ -8,6 +8,7 @@ from scripts.run_glm5_744b_a40b import (
     _validate_glm_checkpoint,
 )
 from tests.ci.ci_register import register_cuda_ci
+from tests.ci.metric_history import register_ci_gate
 
 import miles.utils.external_utils.command_utils as U
 
@@ -17,6 +18,12 @@ import miles.utils.external_utils.command_utils as U
 # side consumes the per-layer topk emitted by SGLang.
 
 register_cuda_ci(est_time=1800, suite="stage-c-8-gpu-h100", labels=["megatron", "replay"])
+
+register_ci_gate(metric_key="train/grad_norm")
+register_ci_gate(metric_key="train/ppo_kl")
+register_ci_gate(metric_key="train/train_rollout_logprob_abs_diff")
+register_ci_gate(metric_key="train/train_rollout_kl")
+register_ci_gate(metric_key="rollout/raw_reward")
 
 
 def _args() -> ScriptArgs:
