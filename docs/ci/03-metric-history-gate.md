@@ -16,6 +16,7 @@ The gate compares a number only against earlier numbers of the same kind, from t
 - **Run series** (the "same test"): `(test_path, backend, suite)`. Runs differing on any field never share a baseline. A test-file edit does not reset the series (see Notes).
 - **Value within a run**: `(metric_key, steps_key, constraint_key, step)` — the declaring gate's literal content plus which point. `steps_key` and `step` are not redundant: a fanned-out declaration (`steps=[0, 1]` / `steps="all"`) produces several values in one run — one per selected step — and each must be judged only against its own step's history, so the literals identify the spec while `step` identifies the point:
   - `steps_key` / `constraint_key` are canonical JSON of the declaration's raw `steps` / `constraint` literals: no whitespace, dict keys sorted, list order kept as written, a string keyword stored with its JSON quotes — `steps=[0, 1]` → `[0,1]`, `steps="last"` → `"last"` (quotes included). Built from the raw literal, never the normalized form, so a code-side default change can never silently re-key a series; editing the declaration's literals changes these keys, so a declaration edit starts a fresh coordinate history by construction.
+  - A field the declaration omitted and the defaults table filled (see Steps & constraint) keys on the **table's** literal — the table entry is the declaration source there, so editing a table entry re-keys every declaration that relied on it: one global reset lever for that standard metric's defaulted baselines, deliberate and heavier than a per-test literal edit.
   - `step` is the point the value came from: step `k` for a per-step value, `-1` for a whole-series reduction (e.g. `steps="last"`) — a reduced value keys on a constant, never the step it happened to land on, or its history would fragment across runs of different lengths.
   - Step-0 `ppo_kl` is compared only against past step-0 `ppo_kl` — never against step 1 or `grad_norm`.
 
@@ -29,6 +30,7 @@ A gate declaration composes a step selection and a constraint, both validated at
 
 - `steps` — which value(s) of the metric's series to compare: `"last"` (the series' last point, a whole-series reduction), `"all"` (every step present), or a list of step indices. `"all"` and a step list fan out to one comparison per step, judged against that step's own history.
 - **Constraint** — whether one value passes against a reference: one band family, `band = max(rel·|ref|, abs_floor)`, plus a `direction` (`two_sided` / `higher_is_worse` / `lower_is_worse`); a literal dict of those params, at least one of `rel` / `abs_floor` written.
+- **Defaults for standard metrics** — a per-`metric_key` defaults table beside the parser (`GATE_DEFAULTS` in `register.py`) supplies `steps` and `constraint` for the captured standard metrics, so `register_ci_gate(metric_key="train/ppo_kl")` alone is a complete declaration. Each omitted field is filled from the table at parse time, through the same schema validation; an explicitly written literal always wins over its table default, and a metric with no table entry must write both fields. The table's keys stay within the capture whitelist (test-enforced). Band values in the table are shadow-calibration starting points — tuning one re-keys the defaulted coordinates (see Identity), so retunes cost a cold start.
 
 The authoritative constraint params are the schema table beside the function; the doc does not duplicate them. A missing/empty series, a missing required step, or a non-finite value (`NaN` / `±Inf`) at a selected coordinate is an ERROR verdict, never a skip — non-finite is judged here, not silently dropped (capture records it faithfully as a strict-JSON string marker the gate-side reader decodes; `write_run` refuses it at the DB boundary).
 
@@ -45,6 +47,8 @@ register_ci_gate(
     steps=[0, 1],                                  # judge steps 0 and 1, each against its own history
     constraint={"abs_floor": 0.02, "direction": "higher_is_worse"},
 )
+
+register_ci_gate(metric_key="rollout/raw_reward")  # standard metric: steps + constraint from GATE_DEFAULTS
 ```
 
 
@@ -220,12 +224,9 @@ Shadow-first: collect, store, and evaluate, but **never block a PR** initially �
 
 - **Hard gate returns as a pure absolute bound.** The removed hard layer mixed two motivations that want different judging logic: a sanity check ("from experience this metric must stay below X" — a plain one-sided limit, no tolerance) and a backstop against implicit drift that the historical gate absorbs (e.g. a logp diff growing a little per PR: each run sits within band of a baseline that itself follows the drift). The old implementation fed `hard_ref` through the same band constraint as a reference value (`evaluate_constraint(constraint, value, ref=hard_ref)`), giving a sanity limit tolerance semantics it should not have. Target — two unmixed declaration flavors:
   - `register_ci_gate(...)` without `hard_ref` — the relative check against trusted history, exactly as documented above.
-  - `register_ci_gate(..., hard_ref=X)` — a plain absolute bound: the selected value must stay below `X` (direction-aware), no band, no history involved. `hard_ref` is a limit, never a pinned pseudo-history reference value — synthesizing a baseline from it was considered and rejected as hard to implement. **It will not read any historical data.**
+  - `register_ci_gate(..., hard_ref=X)` — a plain absolute bound: the selected value must stay below `X` (direction-aware), no band, no history involved. `hard_ref` is a limit, never a pinned pseudo-history reference value — synthesizing a baseline from it was considered and rejected as hard to implement. **It will not read any historical data.** `hard_ref` is never filled from the defaults table — an absolute limit is always written explicitly.
   - Baselines survive both the removal and the return: `hard_ref` was policy, never part of the value coordinate, so adding or dropping the absolute flavor never resets a series.
-- **One-line declaration for standard metrics (a separate PR, after this stack)** — today `register_ci_gate(metric_key="train/train_rollout_logprob_abs_diff")` alone is a parse error (steps and constraint are required); target: a per-`metric_key` defaults table beside the parser (`register.py`) supplies steps + constraint for the standard metrics (`grad_norm`, `ppo_kl`, logp-diff, …), filled at parse time through the same schema validation, so the one-liner is a complete minimal declaration.
-  - Every defaulted key must stay within the capture whitelist; the absolute flavor's `hard_ref` is never defaulted.
-  - Gates stay explicit per test (greppable, uniformly strict ERROR semantics); blanket coverage is the sweep PR below.
-- **Sweep PR (a separate PR, after the defaults table)** — declare the standard one-liners across the CUDA e2e tests in one pass, where each test owner tunes or vetoes their band (partial-model tests have different variance profiles).
+- **Sweep (M4, with the defaults table)** — declare the standard one-liners across the CUDA e2e training tests in one pass, only the metrics each test's run actually emits (a spec on a metric missing from the record is an ERROR verdict that untrusts every nightly run — a mis-swept test would never accumulate a baseline); each test owner tunes or vetoes their line in review.
 - **Capture set becomes** `TARGET_METRIC_KEYS` **∪ declared keys** — the harness parses specs pre-launch and injects the extras via env.
 - **Self-calibrating constraint** — band = k·std of the coordinate's own history, for heteroskedastic tests; and a `mean` (step-average) reduction.
 - **Enforcement** — the per-test allowlist + global kill-switch from Rollout; shadow mode is current behavior.
