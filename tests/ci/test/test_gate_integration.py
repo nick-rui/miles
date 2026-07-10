@@ -9,7 +9,8 @@ Covered:
 
 * passing-attempt selection: only the PASSED attempt's record feeds the gate.
 * nightly write: a `schedule` event makes the hook persist a baseline row
-  whose `trusted` flag comes from the verdict.
+  whose `trusted` flag comes from the verdict; specs sharing a coordinate
+  collapse to one `metric_values` row; a no-spec file writes nothing.
 * PR no-write: a `pull_request` event writes no row and emits a shadow
   verdict string.
 * never-blocks: a not-trusted verdict, and a gate that raises, both leave the
@@ -347,6 +348,57 @@ class TestNightlyWrite:
             20,
         )
         assert vals == [0.30]
+
+    def test_nightly_no_spec_file_writes_nothing(self, tmp_path, store, monkeypatch):
+        # A file with no register_ci_gate call has nothing a baseline can use:
+        # the hook must skip the write entirely, not leave an empty runs row.
+        monkeypatch.setenv("GITHUB_EVENT_NAME", "schedule")
+        test_file = _write_test_file(tmp_path, "")
+        registry = _registry(test_file)
+        record = _write_record(tmp_path, {"rollout/raw_reward": [[0, 0.81]]}, name="m.jsonl")
+
+        run_gate_hook(
+            test_file,
+            record,
+            store=store,
+            registry=registry,
+            nightly=True,
+            provenance=PROVENANCE,
+        )
+        assert _count_runs(store) == 0
+
+    def test_nightly_dedupes_values_by_coordinate(self, tmp_path, store, monkeypatch):
+        # Two specs with identical steps + constraint literals share one
+        # coordinate even though their policy metadata differs; the selected
+        # value is identical, so writing one row per spec would double-weight
+        # this run in the baseline mean.
+        monkeypatch.setenv("GITHUB_EVENT_NAME", "schedule")
+        test_file = _write_test_file(
+            tmp_path,
+            """
+            register_ci_gate(metric_key="rollout/raw_reward",
+                             steps="last", constraint={"rel": 0.20})
+            register_ci_gate(metric_key="rollout/raw_reward",
+                             steps="last", constraint={"rel": 0.20},
+                             enforce=True)
+            """,
+        )
+        registry = _registry(test_file)
+        record = _write_record(tmp_path, {"rollout/raw_reward": [[0, 0.81]]}, name="m.jsonl")
+
+        run_gate_hook(
+            test_file,
+            record,
+            store=store,
+            registry=registry,
+            nightly=True,
+            provenance=PROVENANCE,
+        )
+        assert _count_runs(store) == 1
+        rows = store._conn.execute(
+            "SELECT metric_key, steps_key, constraint_key, step, value FROM metric_values"
+        ).fetchall()
+        assert rows == [("rollout/raw_reward", LAST_KEY, REL20_KEY, -1, 0.81)]
 
 
 # --- PR no-write + shadow verdict -------------------------------------------

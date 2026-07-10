@@ -302,7 +302,9 @@ def run_gate_hook(
     """Evaluate the history gate for one passed CUDA test and act on the verdict.
 
     NIGHTLY-marked run -> persist the run as a trusted/untrusted baseline via
-    `store.write_run`. ORDINARY PR run -> never write; log a shadow verdict and
+    `store.write_run`, one `metric_values` row per coordinate (specs sharing a
+    coordinate collapse to one row); a file that declares no gate writes
+    nothing at all. ORDINARY PR run -> never write; log a shadow verdict and
     append it to `GITHUB_STEP_SUMMARY`.
 
     The entire body is wrapped: any gate or store error is caught and logged and
@@ -313,17 +315,31 @@ def run_gate_hook(
         result = evaluate_gate(filename, merged_record_path, store, registry=registry)
 
         if nightly:
+            if not result.metrics:
+                # Every spec yields at least one per-coordinate result, so an
+                # empty list means the file declares no gate: an empty runs row
+                # is nothing a baseline can use, so write nothing.
+                logger.info(f"[CI Gate][nightly] {filename}: no gate declared; skipping write")
+                return
             identity = RunIdentity(
                 test_path=result.test_path,
                 backend=result.backend,
                 suite=result.suite,
             )
             created_at = now_iso or datetime.datetime.now(datetime.timezone.utc).isoformat()
-            values = [
-                MetricSample(m.metric_key, m.steps_key, m.constraint_key, m.step, m.current)
-                for m in result.metrics
-                if m.current is not None
-            ]
+            # Specs sharing a coordinate (identical declaration literals,
+            # differing only in policy metadata) select the same value; writing
+            # one row per spec would double-weight that baseline mean.
+            seen_coords: set[tuple[str, str, str, int]] = set()
+            values: list[MetricSample] = []
+            for m in result.metrics:
+                if m.current is None:
+                    continue
+                coord = (m.metric_key, m.steps_key, m.constraint_key, m.step)
+                if coord in seen_coords:
+                    continue
+                seen_coords.add(coord)
+                values.append(MetricSample(m.metric_key, m.steps_key, m.constraint_key, m.step, m.current))
             store.write_run(
                 identity,
                 provenance,

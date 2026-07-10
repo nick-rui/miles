@@ -194,6 +194,7 @@ Chart key: rectangle = a step or check; rounded box = a data artifact; diamond =
 - A run is `trusted` iff it passed **all** active gates. A drifting run is still recorded, with `trusted = false`, so it can't drag the baseline. A test that fails then passes on **retry** is gated on its passing attempt's metrics and trusted normally — needing a retry is not itself a trust penalty.
 - **Clean a bad point**: `mark_untrusted` = `UPDATE runs SET trusted = false` on the run. The next gate read excludes it immediately — no rebaseline, no row deletion.
 - **Nightly-marked runs write baselines** — either the `schedule` cron (on `main`, post-merge) **or** a PR carrying the `nightly` label (the PR's own pre-merge code). Provenance (`event_name`, `pr_number`) records which, so a label-PR baseline is distinguishable from a post-merge one and can be `mark_untrusted`'d if it turns out bad. Ordinary (unlabeled) PR runs are read-only and only shadow.
+- **What one nightly run writes** — one `runs` row plus one `metric_values` row per value coordinate: two specs sharing a coordinate (identical `steps` + `constraint` literals, differing only in policy metadata) collapse to a single row, so a duplicated declaration cannot double-weight the baseline mean; and a file that declares no gate writes nothing at all — `run_gate_hook` skips the write instead of leaving an empty `runs` row.
 
 
 
@@ -210,7 +211,6 @@ Shadow-first: collect, store, and evaluate, but **never block a PR** initially �
 - A test-file edit does not reset the series: `test_file_hash` was dropped from the run-series identity because a tiny edit to a test kept wiping its whole history. A test change that genuinely shifts a metric's expected level surfaces as gate failures instead; the reset levers are manual — `mark_untrusted` the stale runs, or edit the declaration literals (new `steps_key` / `constraint_key` ⇒ fresh coordinate).
 - The nightly trigger (`schedule` cron + `nightly` label) already shipped (#1491); detection here is harness-side via `GITHUB_EVENT_NAME`, so this feature needs **no** `pr-test.yml` **edit**.
 - Open: should a brand-new test's first baselines need human confirmation before counting as trusted? (v1: no.)
-- The harness writer does not dedupe `metric_values` by coordinate: two specs sharing a coordinate (identical `steps` + `constraint` literals) write two rows in one nightly run, double-weighting that baseline mean (dedupe: see TODO).
 
 
 
@@ -222,8 +222,6 @@ Shadow-first: collect, store, and evaluate, but **never block a PR** initially �
   - `register_ci_gate(...)` without `hard_ref` — the relative check against trusted history, exactly as documented above.
   - `register_ci_gate(..., hard_ref=X)` — a plain absolute bound: the selected value must stay below `X` (direction-aware), no band, no history involved. `hard_ref` is a limit, never a pinned pseudo-history reference value — synthesizing a baseline from it was considered and rejected as hard to implement. **It will not read any historical data.**
   - Baselines survive both the removal and the return: `hard_ref` was policy, never part of the value coordinate, so adding or dropping the absolute flavor never resets a series.
-- **Writer dedupe (bug fix — lands in M3, the harness writer)** — one nightly run writes one `metric_values` row per coordinate (today two specs sharing a coordinate double-weight the baseline mean; see Notes). Precondition for the defaults table and the sweep PR below.
-- **No-spec runs write nothing (bug fix — lands in M3)** — today a nightly-marked CUDA test with no gate declarations still writes an empty `runs` row (zero values, nothing a baseline can use); `run_gate_hook` skips the write when the file declares no gate.
 - **One-line declaration for standard metrics (a separate PR, after this stack)** — today `register_ci_gate(metric_key="train/train_rollout_logprob_abs_diff")` alone is a parse error (steps and constraint are required); target: a per-`metric_key` defaults table beside the parser (`register.py`) supplies steps + constraint for the standard metrics (`grad_norm`, `ppo_kl`, logp-diff, …), filled at parse time through the same schema validation, so the one-liner is a complete minimal declaration.
   - Every defaulted key must stay within the capture whitelist; the absolute flavor's `hard_ref` is never defaulted.
   - Gates stay explicit per test (greppable, uniformly strict ERROR semantics); blanket coverage is the sweep PR below.
