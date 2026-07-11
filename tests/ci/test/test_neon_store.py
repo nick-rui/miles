@@ -20,6 +20,7 @@ import sys
 import types
 
 import pytest
+from tests.ci.ci_register import register_cpu_ci
 from tests.ci.metric_history import (
     NEON_DATABASE_URL_ENV,
     MetricSample,
@@ -27,6 +28,8 @@ from tests.ci.metric_history import (
     RunIdentity,
     RunProvenance,
 )
+
+register_cpu_ci(est_time=1, suite="stage-a-cpu", labels=[])
 
 IDENTITY = RunIdentity(
     test_path="tests/e2e/test_grpo.py",

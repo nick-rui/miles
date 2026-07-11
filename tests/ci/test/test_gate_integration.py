@@ -24,9 +24,11 @@ import textwrap
 from pathlib import Path
 
 import pytest
-from tests.ci.ci_register import HWBackend, ut_parse_one_file
+from tests.ci.ci_register import HWBackend, register_cpu_ci, ut_parse_one_file
 from tests.ci.ci_utils import build_store_from_env, gate_provenance_from_env, is_nightly, run_gate_hook
 from tests.ci.metric_history import MetricSample, RunIdentity, RunProvenance, SQLiteMetricHistoryStore
+
+register_cpu_ci(est_time=1, suite="stage-a-cpu", labels=[])
 
 # Canonical declaration keys for the `last` + rel-0.20 fixtures below.
 LAST_KEY = json.dumps("last", sort_keys=True, separators=(",", ":"))
