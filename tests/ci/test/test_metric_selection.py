@@ -7,10 +7,12 @@ import textwrap
 from pathlib import Path
 
 import pytest
-from tests.ci.ci_register import CIRegistry, HWBackend, ut_parse_one_file
+from tests.ci.ci_register import CIRegistry, HWBackend, register_cpu_ci, ut_parse_one_file
 from tests.ci.metric_history.constraints import evaluate_constraint
 from tests.ci.metric_history.register import parse_ci_gate_specs
 from tests.ci.metric_history.selection import SelectionError, select
+
+register_cpu_ci(est_time=1, suite="stage-a-cpu", labels=[])
 
 # --- step selection -----------------------------------------------------------
 

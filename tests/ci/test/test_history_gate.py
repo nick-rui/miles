@@ -13,8 +13,11 @@ import textwrap
 from pathlib import Path
 
 import pytest
+from tests.ci.ci_register import register_cpu_ci
 from tests.ci.metric_history import MetricSample, RunIdentity, RunProvenance, SQLiteMetricHistoryStore
 from tests.ci.metric_history.gate import GateStatus, evaluate_gate, parse_merged_record
+
+register_cpu_ci(est_time=1, suite="stage-a-cpu", labels=[])
 
 PROVENANCE = RunProvenance(
     commit_sha="deadbeef",
