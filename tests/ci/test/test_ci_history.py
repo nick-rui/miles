@@ -11,11 +11,13 @@ import os
 from pathlib import Path
 
 import pytest
-
+from tests.ci.ci_register import register_cpu_ci
 from tests.ci.ci_utils import TestFile, _attempt_record_dir, run_unittest_files
 
 from miles.utils.tracking_utils import RECORD_DIR_ENV, TARGET_METRIC_KEYS
 from miles.utils.tracking_utils.ci_history import CiHistoryBackend
+
+register_cpu_ci(est_time=1, suite="stage-a-cpu", labels=[])
 
 
 def test_all_backends_registered():
